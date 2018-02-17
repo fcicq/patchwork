@@ -10,8 +10,9 @@ https://android.googlesource.com/kernel/common/+/android-3.18 [(log)](https://an
 (TODO: describe important modules/subsystems which are not in mainline.)
 
 # Patchwork
-[netdev](https://patchwork.ozlabs.org/project/netdev/list/?state=*)
-[linux-fsdevel](https://patchwork.kernel.org/project/linux-fsdevel/list/?state=*)
+[netdev](https://patchwork.ozlabs.org/project/netdev/list/?state=%2a)
+
+[linux-fsdevel](https://patchwork.kernel.org/project/linux-fsdevel/list/?state=%2a)
 
 # DKMS
 (TODO)
