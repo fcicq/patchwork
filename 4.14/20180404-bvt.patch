@@ -1,0 +1,360 @@
+diff --git a/include/linux/sched/sysctl.h b/include/linux/sched/sysctl.h
+index d6a18a3839cc..cbebb4604c01 100644
+--- a/include/linux/sched/sysctl.h
++++ b/include/linux/sched/sysctl.h
+@@ -38,9 +38,9 @@ extern unsigned int sysctl_numa_balancing_scan_period_max;
+ extern unsigned int sysctl_numa_balancing_scan_size;
+ 
+ #ifdef CONFIG_SCHED_DEBUG
+-extern unsigned int sysctl_sched_migration_cost;
+-extern unsigned int sysctl_sched_nr_migrate;
+-extern unsigned int sysctl_sched_time_avg;
++extern __read_mostly unsigned int sysctl_sched_migration_cost;
++extern __read_mostly unsigned int sysctl_sched_nr_migrate;
++extern __read_mostly unsigned int sysctl_sched_time_avg;
+ 
+ int sched_proc_update_handler(struct ctl_table *table, int write,
+ 		void __user *buffer, size_t *length,
+@@ -64,6 +64,10 @@ extern unsigned int sysctl_sched_cfs_bandwidth_slice;
+ extern unsigned int sysctl_sched_autogroup_enabled;
+ #endif
+ 
++#ifdef CONFIG_CFS_BVT
++extern unsigned int sysctl_sched_bvt_place_epsilon;
++#endif
++
+ extern int sysctl_sched_rr_timeslice;
+ extern int sched_rr_timeslice;
+ 
+diff --git a/kernel/sched/core.c b/kernel/sched/core.c
+index 8cf36b30a006..e9272ef5fab2 100644
+--- a/kernel/sched/core.c
++++ b/kernel/sched/core.c
+@@ -2164,6 +2164,10 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
+ 	p->se.prev_sum_exec_runtime	= 0;
+ 	p->se.nr_migrations		= 0;
+ 	p->se.vruntime			= 0;
++#ifdef CONFIG_CFS_BVT
++	p->se.effective_vruntime	= 0;
++	p->se.is_warped			= 0;
++#endif
+ 	INIT_LIST_HEAD(&p->se.group_node);
+ 
+ #ifdef CONFIG_FAIR_GROUP_SCHED
+@@ -5894,6 +5898,9 @@ void __init sched_init(void)
+ 		 */
+ 		init_cfs_bandwidth(&root_task_group.cfs_bandwidth);
+ 		init_tg_cfs_entry(&root_task_group, &rq->cfs, NULL, i, NULL);
++#ifdef CONFIG_CFS_BVT
++		root_task_group.bvt_warp_ns = 0;
++#endif /* CONFIG_CFS_BVT */
+ #endif /* CONFIG_FAIR_GROUP_SCHED */
+ 
+ 		rq->rt.rt_runtime = def_rt_bandwidth.rt_runtime;
+@@ -6633,6 +6640,23 @@ static int cpu_stats_show(struct seq_file *sf, void *v)
+ 	return 0;
+ }
+ #endif /* CONFIG_CFS_BANDWIDTH */
++
++#ifdef CONFIG_CFS_BVT
++static int cpu_bvt_warp_write_s64(struct cgroup_subsys_state *css,
++				struct cftype *cftype, s64 warp_ns)
++{
++	struct task_group *tg = css_tg(css);
++	tg->bvt_warp_ns = warp_ns;
++	return 0;
++}
++
++static s64 cpu_bvt_warp_read_s64(struct cgroup_subsys_state *css,
++				struct cftype *cftype)
++{
++	struct task_group *tg = css_tg(css);
++	return tg->bvt_warp_ns;
++}
++#endif /* CONFIG_CFS_BVT */
+ #endif /* CONFIG_FAIR_GROUP_SCHED */
+ 
+ #ifdef CONFIG_RT_GROUP_SCHED
+@@ -6685,6 +6709,13 @@ static struct cftype cpu_files[] = {
+ 		.seq_show = cpu_stats_show,
+ 	},
+ #endif
++#ifdef CONFIG_CFS_BVT
++	{
++		.name = "bvt_warp_ns",
++		.read_s64 = cpu_bvt_warp_read_s64,
++		.write_s64 = cpu_bvt_warp_write_s64,
++	},
++#endif
+ #ifdef CONFIG_RT_GROUP_SCHED
+ 	{
+ 		.name = "rt_runtime_us",
+diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
+index 5c09ddf8c832..a78f90023b66 100644
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
+@@ -124,6 +124,22 @@ int __weak arch_asym_cpu_priority(int cpu)
+ unsigned int sysctl_sched_cfs_bandwidth_slice		= 5000UL;
+ #endif
+ 
++#ifdef CONFIG_CFS_BVT
++/*
++ * If the BVT_PLACEMENT scheduler feature is enabled, waking BVT tasks
++ * are placed differently from CFS tasks when they wakeup.  Rather
++ * than being placed some large factor (i.e. sched_latency >> 1)
++ * before min_vruntime (which gives waking tasks an unfair advantage
++ * in preempting currently runng tasks), they are placed
++ * sched_bvt_place_epsilon nanoseconds relative to min_vruntime.  If
++ * you really want a BVT task to preempt currently running tasks, it
++ * should have a greater "warp" value than the current running task.
++ *
++ * Default: 1us in the future, units: nanoseconds
++ */
++unsigned int sysctl_sched_bvt_place_epsilon = 1000UL;
++#endif
++
+ /*
+  * The margin used when comparing utilization with CPU capacity:
+  * util * margin < capacity * 1024
+@@ -480,6 +496,26 @@ find_matching_se(struct sched_entity **se, struct sched_entity **pse)
+ 
+ #endif	/* CONFIG_FAIR_GROUP_SCHED */
+ 
++#ifdef CONFIG_CFS_BVT
++static inline void update_effective_vruntime(struct sched_entity *se)
++{
++	s64 warp;
++	struct task_group *tg;
++
++	if (entity_is_task(se)) {
++		se->effective_vruntime = se->vruntime;
++		return;
++	}
++
++	tg = se->my_q->tg;
++	warp = tg->bvt_warp_ns;
++
++	/* FIXME: Should we calc_delta_fair on warp_ns? */
++	se->effective_vruntime = se->vruntime - warp;
++	se->is_warped = warp ? 1 : 0;
++}
++#endif /* CONFIG_CFS_BVT */
++
+ static __always_inline
+ void account_cfs_rq_runtime(struct cfs_rq *cfs_rq, u64 delta_exec);
+ 
+@@ -508,7 +544,11 @@ static inline u64 min_vruntime(u64 min_vruntime, u64 vruntime)
+ static inline int entity_before(struct sched_entity *a,
+ 				struct sched_entity *b)
+ {
++#ifdef CONFIG_CFS_BVT
++	return (s64)(a->effective_vruntime - b->effective_vruntime) < 0;
++#else
+ 	return (s64)(a->vruntime - b->vruntime) < 0;
++#endif
+ }
+ 
+ static void update_min_vruntime(struct cfs_rq *cfs_rq)
+@@ -846,6 +886,9 @@ static void update_curr(struct cfs_rq *cfs_rq)
+ 	schedstat_add(cfs_rq->exec_clock, delta_exec);
+ 
+ 	curr->vruntime += calc_delta_fair(delta_exec, curr);
++#ifdef CONFIG_CFS_BVT
++	update_effective_vruntime(curr);
++#endif
+ 	update_min_vruntime(cfs_rq);
+ 
+ 	if (entity_is_task(curr)) {
+@@ -3618,8 +3661,17 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int initial)
+ 		vruntime -= thresh;
+ 	}
+ 
++#ifdef CONFIG_CFS_BVT
++	if (sched_feat(BVT_PLACEMENT) && !entity_is_task(se) && se->is_warped) {
++		vruntime = cfs_rq->min_vruntime + sysctl_sched_bvt_place_epsilon;
++	}
++#endif
++
+ 	/* ensure we never gain time by being placed backwards. */
+ 	se->vruntime = max_vruntime(se->vruntime, vruntime);
++#ifdef CONFIG_CFS_BVT
++	update_effective_vruntime(se);
++#endif
+ }
+ 
+ static void check_enqueue_throttle(struct cfs_rq *cfs_rq);
+@@ -3685,8 +3737,12 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
+ 	 * If we're the current task, we must renormalise before calling
+ 	 * update_curr().
+ 	 */
+-	if (renorm && curr)
++	if (renorm && curr) {
+ 		se->vruntime += cfs_rq->min_vruntime;
++#ifdef CONFIG_CFS_BVT
++		update_effective_vruntime(se);
++#endif
++	}
+ 
+ 	update_curr(cfs_rq);
+ 
+@@ -3696,8 +3752,12 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
+ 	 * placed in the past could significantly boost this task to the
+ 	 * fairness detriment of existing tasks.
+ 	 */
+-	if (renorm && !curr)
++	if (renorm && !curr) {
+ 		se->vruntime += cfs_rq->min_vruntime;
++#ifdef CONFIG_CFS_BVT
++		update_effective_vruntime(se);
++#endif
++	}
+ 
+ 	/*
+ 	 * When enqueuing a sched_entity, we must:
+@@ -3809,8 +3869,12 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
+ 	 * update_min_vruntime() again, which will discount @se's position and
+ 	 * can move min_vruntime forward still more.
+ 	 */
+-	if (!(flags & DEQUEUE_SLEEP))
++	if (!(flags & DEQUEUE_SLEEP)) {
+ 		se->vruntime -= cfs_rq->min_vruntime;
++#ifdef CONFIG_CFS_BVT
++		update_effective_vruntime(se);
++#endif
++	}
+ 
+ 	/* return excess runtime on last dequeue */
+ 	return_cfs_rq_runtime(cfs_rq);
+@@ -3858,7 +3922,11 @@ check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
+ 		return;
+ 
+ 	se = __pick_first_entity(cfs_rq);
++#ifdef CONFIG_CFS_BVT
++	delta = curr->effective_vruntime - se->effective_vruntime;
++#else
+ 	delta = curr->vruntime - se->vruntime;
++#endif
+ 
+ 	if (delta < 0)
+ 		return;
+@@ -6057,6 +6125,9 @@ static void migrate_task_rq_fair(struct task_struct *p)
+ #endif
+ 
+ 		se->vruntime -= min_vruntime;
++#ifdef CONFIG_CFS_BVT
++		update_effective_vruntime(se);
++#endif
+ 	}
+ 
+ 	/*
+@@ -6119,7 +6190,11 @@ wakeup_gran(struct sched_entity *curr, struct sched_entity *se)
+ static int
+ wakeup_preempt_entity(struct sched_entity *curr, struct sched_entity *se)
+ {
++#ifdef CONFIG_CFS_BVT
++	s64 gran, vdiff = curr->effective_vruntime - se->effective_vruntime;
++#else
+ 	s64 gran, vdiff = curr->vruntime - se->vruntime;
++#endif
+ 
+ 	if (vdiff <= 0)
+ 		return -1;
+@@ -9075,6 +9150,9 @@ static void task_fork_fair(struct task_struct *p)
+ 	if (curr) {
+ 		update_curr(cfs_rq);
+ 		se->vruntime = curr->vruntime;
++#ifdef CONFIG_CFS_BVT
++		update_effective_vruntime(se);
++#endif
+ 	}
+ 	place_entity(cfs_rq, se, 1);
+ 
+@@ -9084,10 +9162,17 @@ static void task_fork_fair(struct task_struct *p)
+ 		 * 'current' within the tree based on its new key value.
+ 		 */
+ 		swap(curr->vruntime, se->vruntime);
++#ifdef CONFIG_CFS_BVT
++		update_effective_vruntime(curr);
++		update_effective_vruntime(se);
++#endif
+ 		resched_curr(rq);
+ 	}
+ 
+ 	se->vruntime -= cfs_rq->min_vruntime;
++#ifdef CONFIG_CFS_BVT
++	update_effective_vruntime(se);
++#endif
+ 	rq_unlock(rq, &rf);
+ }
+ 
+@@ -9207,6 +9292,9 @@ static void detach_task_cfs_rq(struct task_struct *p)
+ 		 */
+ 		place_entity(cfs_rq, se, 0);
+ 		se->vruntime -= cfs_rq->min_vruntime;
++#ifdef CONFIG_CFS_BVT
++		update_effective_vruntime(se);
++#endif
+ 	}
+ 
+ 	detach_entity_cfs_rq(se);
+@@ -9219,8 +9307,12 @@ static void attach_task_cfs_rq(struct task_struct *p)
+ 
+ 	attach_entity_cfs_rq(se);
+ 
+-	if (!vruntime_normalized(p))
++	if (!vruntime_normalized(p)) {
+ 		se->vruntime += cfs_rq->min_vruntime;
++#ifdef CONFIG_CFS_BVT
++		update_effective_vruntime(se);
++#endif
++	}
+ }
+ 
+ static void switched_from_fair(struct rq *rq, struct task_struct *p)
+diff --git a/kernel/sched/features.h b/kernel/sched/features.h
+index 9552fd5854bf..df3f2d96e177 100644
+--- a/kernel/sched/features.h
++++ b/kernel/sched/features.h
+@@ -81,6 +81,7 @@ SCHED_FEAT(RT_PUSH_IPI, true)
+ SCHED_FEAT(RT_RUNTIME_SHARE, true)
+ SCHED_FEAT(LB_MIN, false)
+ SCHED_FEAT(ATTACH_AGE_LOAD, true)
++SCHED_FEAT(BVT_PLACEMENT, true)
+ 
+ SCHED_FEAT(WA_IDLE, true)
+ SCHED_FEAT(WA_WEIGHT, true)
+diff --git a/kernel/sched/sched.h b/kernel/sched/sched.h
+index 307c35d33660..e565e19e9d1e 100644
+--- a/kernel/sched/sched.h
++++ b/kernel/sched/sched.h
+@@ -312,6 +312,10 @@ struct task_group {
+ #endif
+ #endif
+ 
++#ifdef CONFIG_CFS_BVT
++	s64 bvt_warp_ns;
++#endif
++
+ #ifdef CONFIG_RT_GROUP_SCHED
+ 	struct sched_rt_entity **rt_se;
+ 	struct rt_rq **rt_rq;
+diff --git a/kernel/sysctl.c b/kernel/sysctl.c
+index 069550540a39..4e2cc7593a21 100644
+--- a/kernel/sysctl.c
++++ b/kernel/sysctl.c
+@@ -464,6 +464,15 @@ static struct ctl_table kern_table[] = {
+ 		.extra1		= &one,
+ 	},
+ #endif
++#ifdef CONFIG_CFS_BVT
++	{
++		.procname	= "sched_bvt_place_epsilon",
++		.data		= &sysctl_sched_bvt_place_epsilon,
++		.maxlen		= sizeof(unsigned int),
++		.mode		= 0644,
++		.proc_handler	= proc_dointvec,
++	},
++#endif
+ #ifdef CONFIG_PROVE_LOCKING
+ 	{
+ 		.procname	= "prove_locking",

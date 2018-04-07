@@ -1,0 +1,14 @@
+diff --git a/mm/page_alloc.c b/mm/page_alloc.c
+index 6dbc49e..20af138 100644
+--- a/mm/page_alloc.c
++++ b/mm/page_alloc.c
+@@ -4189,7 +4189,8 @@ struct page *
+ 	finalise_ac(gfp_mask, order, &ac);
+ 
+ 	/* First allocation attempt */
+-	page = get_page_from_freelist(alloc_mask, order, alloc_flags, &ac);
++	page = get_page_from_freelist(alloc_mask & ~__GFP_DIRECT_RECLAIM,
++				      order, alloc_flags, &ac);
+ 	if (likely(page))
+ 		goto out;
+ 

@@ -1,0 +1,98 @@
+From patchwork Tue Nov 20 21:50:59 2012
+Content-Type: text/plain; charset="utf-8"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Subject: [v3] devtmpfs: mount with noexec and nosuid
+From: Kees Cook <keescook@chromium.org>
+X-Patchwork-Id: 1776151
+Message-Id: <20121120215059.GA1859@www.outflux.net>
+To: linux-kernel@vger.kernel.org
+Cc: Greg Kroah-Hartman <gregkh@linuxfoundation.org>,
+ ellyjones@chromium.org, Kay Sievers <kay@vrfy.org>,
+ Roland Eggner <edvx1@systemanalysen.net>
+Date: Tue, 20 Nov 2012 13:50:59 -0800
+
+Since devtmpfs is writable, make the default noexec,nosuid as well. This
+protects from the case of a privileged process having an arbitrary file
+write flaw and an argumentless arbitrary execution (i.e. it would lack
+the ability to run "mount -o remount,exec,suid /dev").
+
+Rather than relying on userspace "mount -o remount,noexec,nosuid /dev",
+accomplish this from the kernel. This means no additional exec during
+(potentially time-sensitive) boot is needed. The kernel is responsible
+for this mount, so the mount flags should be configurable.
+
+Cc: ellyjones@chromium.org
+Cc: Kay Sievers <kay@vrfy.org>
+Cc: Roland Eggner <edvx1@systemanalysen.net>
+Signed-off-by: Kees Cook <keescook@chromium.org>
+Acked-by: Roland Eggner
+---
+v3:
+- use a single define for the mount flags, suggested by Greg K.H.
+v2:
+- use CONFIG_DEVTMPFS_SAFE to wrap the logic.
+---
+ drivers/base/Kconfig    |   12 ++++++++++++
+ drivers/base/devtmpfs.c |   11 +++++++++--
+ 2 files changed, 21 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/base/Kconfig b/drivers/base/Kconfig
+index b34b5cd..a37fcf2 100644
+--- a/drivers/base/Kconfig
++++ b/drivers/base/Kconfig
+@@ -56,6 +56,18 @@ config DEVTMPFS_MOUNT
+ 	  rescue mode with init=/bin/sh, even when the /dev directory
+ 	  on the rootfs is completely empty.
+ 
++config DEVTMPFS_SAFE
++	bool "Use nosuid,noexec mount options on devtmpfs"
++	depends on DEVTMPFS
++	help
++	  This instructs the kernel to include the MS_NOEXEC and
++	  MS_NOSUID mount flags when mounting devtmpfs. This prevents
++	  certain kinds of code-execution attacks on embedded platforms.
++
++	  Notice: If enabled, things like /dev/mem cannot be mmapped
++	  with the PROT_EXEC flag. This can break, for example, non-KMS
++	  video drivers.
++
+ config STANDALONE
+ 	bool "Select only drivers that don't need compile-time external firmware" if EXPERIMENTAL
+ 	default y
+diff --git a/drivers/base/devtmpfs.c b/drivers/base/devtmpfs.c
+index 147d1a4..e44ca1d 100644
+--- a/drivers/base/devtmpfs.c
++++ b/drivers/base/devtmpfs.c
+@@ -25,6 +25,12 @@
+ #include <linux/slab.h>
+ #include <linux/kthread.h>
+ 
++#ifdef CONFIG_DEVTMPFS_SAFE
++# define DEVTMPFS_MFLAGS	(MS_SILENT | MS_NOEXEC | MS_NOSUID)
++#else
++# define DEVTMPFS_MFLAGS	MS_SILENT
++#endif
++
+ static struct task_struct *thread;
+ 
+ #if defined CONFIG_DEVTMPFS_MOUNT
+@@ -347,7 +353,8 @@ int devtmpfs_mount(const char *mntdir)
+ 	if (!thread)
+ 		return 0;
+ 
+-	err = sys_mount("devtmpfs", (char *)mntdir, "devtmpfs", MS_SILENT, NULL);
++	err = sys_mount("devtmpfs", (char *)mntdir, "devtmpfs",
++			DEVTMPFS_MFLAGS, NULL);
+ 	if (err)
+ 		printk(KERN_INFO "devtmpfs: error mounting %i\n", err);
+ 	else
+@@ -372,7 +379,7 @@ static int devtmpfsd(void *p)
+ 	*err = sys_unshare(CLONE_NEWNS);
+ 	if (*err)
+ 		goto out;
+-	*err = sys_mount("devtmpfs", "/", "devtmpfs", MS_SILENT, options);
++	*err = sys_mount("devtmpfs", "/", "devtmpfs", DEVTMPFS_MFLAGS, options);
+ 	if (*err)
+ 		goto out;
+ 	sys_chdir("/.."); /* will traverse into overmounted root */

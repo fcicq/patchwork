@@ -1,0 +1,22 @@
+diff --git a/mm/shmem.c b/mm/shmem.c
+index f383298b7280..797bd80d77a4 100644
+--- a/mm/shmem.c
++++ b/mm/shmem.c
+@@ -3796,11 +3796,17 @@ int shmem_fill_super(struct super_block *sb, void *data, int silent)
+ 		}
+ 	} else {
+ 		sb->s_flags |= MS_NOUSER;
++		// fcicq: kernmount is noexec nodev nosuid
++		sb->s_flags |= SB_NOSUID | SB_NOEXEC;
++		sb->s_iflags |= SB_I_NOEXEC | SB_I_NODEV;
+ 	}
+ 	sb->s_export_op = &shmem_export_ops;
+ 	sb->s_flags |= MS_NOSEC;
+ #else
+ 	sb->s_flags |= MS_NOUSER;
++	// fcicq: kernmount is noexec nodev nosuid
++	sb->s_flags |= SB_NOSUID | SB_NOEXEC;
++	sb->s_iflags |= SB_I_NOEXEC | SB_I_NODEV;
+ #endif
+ 
+ 	spin_lock_init(&sbinfo->stat_lock);

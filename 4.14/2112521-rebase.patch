@@ -1,0 +1,89 @@
+diff --git a/Documentation/networking/ip-sysctl.txt b/Documentation/networking/ip-sysctl.txt
+index d499676890d8..5580f8241c94 100644
+--- a/Documentation/networking/ip-sysctl.txt
++++ b/Documentation/networking/ip-sysctl.txt
+@@ -526,6 +526,23 @@ tcp_rmem - vector of 3 INTEGERs: min, default, max
+ tcp_sack - BOOLEAN
+ 	Enable select acknowledgments (SACKS).
+ 
++tcp_simult_connect - BOOLEAN
++	Enables TCP simultaneous connect feature conforming to RFC793.
++	Strict implementation of RFC793 (TCP) requires support for a
++	feature called "simultaneous connect", which allows two clients to
++	connect to each other without anyone entering a listening state.
++	While almost never used, and supported by few OSes, Linux supports
++	this feature.
++
++	However, it introduces a weakness in the protocol which makes it
++	very easy for an attacker to prevent a client from connecting to
++	a known server. The attacker only has to guess the source port
++	to shut down the client connection during its establishment. The
++	impact is limited, but it may be used to prevent an antivirus
++	or IPS from fetching updates and not detecting an attack, or to
++	prevent an SSL gateway or browser from fetching a CRL.
++	Default: TRUE
++
+ tcp_slow_start_after_idle - BOOLEAN
+ 	If set, provide RFC2861 behavior and time out the congestion
+ 	window after an idle period.  An idle period is defined at
+diff --git a/include/net/tcp.h b/include/net/tcp.h
+index d323d4fa742c..79d534d35d6a 100644
+--- a/include/net/tcp.h
++++ b/include/net/tcp.h
+@@ -269,6 +269,7 @@ extern int sysctl_tcp_recovery;
+ 
+ extern int sysctl_tcp_limit_output_bytes;
+ extern int sysctl_tcp_challenge_ack_limit;
++extern int sysctl_tcp_simult_connect;
+ extern int sysctl_tcp_min_tso_segs;
+ extern int sysctl_tcp_min_rtt_wlen;
+ extern int sysctl_tcp_autocorking;
+diff --git a/net/ipv4/sysctl_net_ipv4.c b/net/ipv4/sysctl_net_ipv4.c
+index 0989e739d098..6f5ceaa5097a 100644
+--- a/net/ipv4/sysctl_net_ipv4.c
++++ b/net/ipv4/sysctl_net_ipv4.c
+@@ -29,6 +29,7 @@
+ 
+ static int zero;
+ static int one = 1;
++static int two = 2;
+ static int four = 4;
+ static int thousand = 1000;
+ static int gso_max_segs = GSO_MAX_SEGS;
+@@ -730,6 +731,15 @@ static struct ctl_table ipv4_table[] = {
+ 		.proc_handler	= proc_dointvec_minmax,
+ 		.extra1		= &zero,
+ 	},
++	{
++		.procname	= "tcp_simult_connect",
++		.data		= &sysctl_tcp_simult_connect,
++		.maxlen		= sizeof(int),
++		.mode		= 0644,
++		.proc_handler	= proc_dointvec_minmax,
++		.extra1		= &zero,
++		.extra2		= &two,
++	},
+ 	{
+ 		.procname	= "udp_mem",
+ 		.data		= &sysctl_udp_mem,
+diff --git a/net/ipv4/tcp_input.c b/net/ipv4/tcp_input.c
+index 14474acea0bb..b4e0511bba67 100644
+--- a/net/ipv4/tcp_input.c
++++ b/net/ipv4/tcp_input.c
+@@ -94,6 +94,7 @@ int sysctl_tcp_frto __read_mostly = 2;
+ int sysctl_tcp_min_rtt_wlen __read_mostly = 300;
+ int sysctl_tcp_moderate_rcvbuf __read_mostly = 1;
+ int sysctl_tcp_early_retrans __read_mostly = 3;
++int sysctl_tcp_simult_connect __read_mostly = 1;
+ int sysctl_tcp_invalid_ratelimit __read_mostly = HZ/2;
+ 
+ #define FLAG_DATA		0x01 /* Incoming frame contained data.		*/
+@@ -5776,7 +5777,7 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
+ 	    tcp_paws_reject(&tp->rx_opt, 0))
+ 		goto discard_and_undo;
+ 
+-	if (th->syn) {
++	if (th->syn && sysctl_tcp_simult_connect) {
+ 		/* We see SYN without ACK. It is attempt of
+ 		 * simultaneous connect with crossed SYNs.
+ 		 * Particularly, it can be connect to self.

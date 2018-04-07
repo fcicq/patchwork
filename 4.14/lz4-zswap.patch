@@ -1,0 +1,26 @@
+diff --git a/mm/Kconfig b/mm/Kconfig
+index 9c4bdddd80c2..417b86214e9a 100644
+--- a/mm/Kconfig
++++ b/mm/Kconfig
+@@ -542,7 +542,7 @@ config MEM_SOFT_DIRTY
+ config ZSWAP
+ 	bool "Compressed cache for swap pages (EXPERIMENTAL)"
+ 	depends on FRONTSWAP && CRYPTO=y
+-	select CRYPTO_LZO
++	select CRYPTO_LZ4
+ 	select ZPOOL
+ 	default n
+ 	help
+diff --git a/mm/zswap.c b/mm/zswap.c
+index 597008a44f70..eb69ea89fec6 100644
+--- a/mm/zswap.c
++++ b/mm/zswap.c
+@@ -89,7 +89,7 @@ static struct kernel_param_ops zswap_enabled_param_ops = {
+ module_param_cb(enabled, &zswap_enabled_param_ops, &zswap_enabled, 0644);
+ 
+ /* Crypto compressor to use */
+-#define ZSWAP_COMPRESSOR_DEFAULT "lzo"
++#define ZSWAP_COMPRESSOR_DEFAULT "lz4"
+ static char *zswap_compressor = ZSWAP_COMPRESSOR_DEFAULT;
+ static int zswap_compressor_param_set(const char *,
+ 				      const struct kernel_param *);

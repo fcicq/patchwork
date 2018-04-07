@@ -1,0 +1,38 @@
+diff --git a/include/net/inet_hashtables.h b/include/net/inet_hashtables.h
+index e9c2ed8..7253fce 100644
+--- a/include/net/inet_hashtables.h
++++ b/include/net/inet_hashtables.h
+@@ -113,7 +113,7 @@ struct inet_listen_hashbucket {
+ };
+ 
+ /* This is for listening sockets, thus all sockets which possess wildcards. */
+-#define INET_LHTABLE_SIZE	32	/* Yes, really, this is all you need. */
++#define INET_LHTABLE_SIZE	(1U << (CONFIG_INET_LHTABLE_SHIFT))
+ 
+ struct inet_hashinfo {
+ 	/* This is for sockets with full identity only.  Sockets here will
+diff --git a/net/ipv4/Kconfig b/net/ipv4/Kconfig
+index 9e95d7f..a92954e 100644
+--- a/net/ipv4/Kconfig
++++ b/net/ipv4/Kconfig
+@@ -440,6 +440,20 @@ config INET_TCP_DIAG
+ 	depends on INET_DIAG
+ 	def_tristate INET_DIAG
+ 
++config INET_LHTABLE_SHIFT
++	int "Number of TCP port listener table buckets (5 => 32, 8 => 256)"
++	default 5
++	range 0 12
++	help
++	  Select number of buckets in TCP listener hash as a power of 2
++	  32 is probably enough unless you run a lot of different servers
++	  Examples:
++		     4 => 16
++		     5 => 32 (default)
++		     6 => 64
++		     7 => 128
++		     8 => 256
++
+ menuconfig TCP_CONG_ADVANCED
+ 	bool "TCP: advanced congestion control"
+ 	---help---
