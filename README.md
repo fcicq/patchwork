@@ -7,7 +7,7 @@ patch (including others' work) for opensource projects.
 * proc-hidepid use hidepid=2 by default
 * kconfig-x86-removecompression reduce kernel size
 
-## 4.14 patches ported
+## 4.14 patches ported by me
 * 20180404-bvt Borrowed Virtual Time for 4.14, original for 3.5 from https://gist.github.com/leverich/5913713
 
 ## picked from mainline (4.14+)
@@ -15,10 +15,13 @@ patch (including others' work) for opensource projects.
 * 10027975 mm: don't warn about allocations which stall for too long
 * 10122749 sched: Only immediately migrate tasks due to interrupts if prev and target CPUs share cache
 
-## rejected by upstream
+## known rejected by upstream maintainer
 * 1776151 devtmpfs: mount with noexec and nosuid (Note: systemd mounts with nosuid by default, noexec may break some app)
 * 2212521 tcp: sysctl to disable TCP simultaneous connect
 * 79014 Make INET_LHTABLE_SIZE a compile-time tunable
+
+## other
+* (None at the moment)
 
 # Resources
 ## Android Kernel
