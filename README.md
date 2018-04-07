@@ -10,9 +10,12 @@ patch (including others' work) for opensource projects.
 # 4.14 patches ported
 * 20180404-bvt Borrowed Virtual Time for 4.14, original for 3.5 from https://gist.github.com/leverich/5913713
 
-# other patches picked
+# picked from mainline (4.14+)
 * 9934049 mm,page_alloc: don't call \_\_node_reclaim() without scoped allocation constraints.
 * 10027975 mm: don't warn about allocations which stall for too long
+* 10122749 sched: Only immediately migrate tasks due to interrupts if prev and target CPUs share cache
+
+# rejected by upstream
 * 1776151 devtmpfs: mount with noexec and nosuid (Note: systemd mounts with nosuid by default, noexec may break some app)
 * 2212521 tcp: sysctl to disable TCP simultaneous connect
 * 79014 Make INET_LHTABLE_SIZE a compile-time tunable
