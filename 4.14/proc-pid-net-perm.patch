@@ -1,0 +1,15 @@
+diff --git a/fs/proc/proc_net.c b/fs/proc/proc_net.c
+index a2bf369c923d..0be915c9268d 100644
+--- a/fs/proc/proc_net.c
++++ b/fs/proc/proc_net.c
+@@ -132,6 +132,10 @@ static struct dentry *proc_tgid_net_lookup(struct inode *dir,
+ 	struct dentry *de;
+ 	struct net *net;
+ 
++	// fcicq: /proc/pid/net perm
++	if (!capable(CAP_NET_ADMIN))
++		return ERR_PTR(-EPERM);
++
+ 	de = ERR_PTR(-ENOENT);
+ 	net = get_proc_task_net(dir);
+ 	if (net != NULL) {
