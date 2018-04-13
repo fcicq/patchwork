@@ -1,0 +1,26 @@
+diff --git a/arch/x86/boot/Makefile b/arch/x86/boot/Makefile
+index d88a2fddba8c..1c060748c813 100644
+--- a/arch/x86/boot/Makefile
++++ b/arch/x86/boot/Makefile
+@@ -100,7 +100,7 @@ $(obj)/zoffset.h: $(obj)/compressed/vmlinux FORCE
+ AFLAGS_header.o += -I$(objtree)/$(obj)
+ $(obj)/header.o: $(obj)/zoffset.h
+ 
+-LDFLAGS_setup.elf	:= -T
++LDFLAGS_setup.elf	:= -m elf_i386 -T
+ $(obj)/setup.elf: $(src)/setup.ld $(SETUP_OBJS) FORCE
+ 	$(call if_changed,ld)
+ 
+diff --git a/arch/x86/realmode/rm/Makefile b/arch/x86/realmode/rm/Makefile
+index 4463fa72db94..96cb20de08af 100644
+--- a/arch/x86/realmode/rm/Makefile
++++ b/arch/x86/realmode/rm/Makefile
+@@ -47,7 +47,7 @@ $(obj)/pasyms.h: $(REALMODE_OBJS) FORCE
+ targets += realmode.lds
+ $(obj)/realmode.lds: $(obj)/pasyms.h
+ 
+-LDFLAGS_realmode.elf := --emit-relocs -T
++LDFLAGS_realmode.elf := -m elf_i386 --emit-relocs -T
+ CPPFLAGS_realmode.lds += -P -C -I$(objtree)/$(obj)
+ 
+ targets += realmode.elf

@@ -1,0 +1,13 @@
+diff --git a/kernel/sched/core.c b/kernel/sched/core.c
+index 8cf36b30a006..8710c8c031ff 100644
+--- a/kernel/sched/core.c
++++ b/kernel/sched/core.c
+@@ -204,7 +204,7 @@ static void update_rq_clock_task(struct rq *rq, s64 delta)
+ 	rq->clock_task += delta;
+
+ #if defined(CONFIG_IRQ_TIME_ACCOUNTING) || defined(CONFIG_PARAVIRT_TIME_ACCOUNTING)
+-	if ((irq_delta + steal) && sched_feat(NONTASK_CAPACITY))
++	if ((irq_delta + steal) && !!sched_feat(NONTASK_CAPACITY))
+ 		sched_rt_avg_update(rq, irq_delta + steal);
+ #endif
+ }
