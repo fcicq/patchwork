@@ -9,7 +9,7 @@ patch (including others' work) for opensource projects.
 * proc-pid-net-perm deny /proc/net access unless CAP_NET_ADMIN
 * protect-proc-pid-ns deny /proc/pid/ns access unless CAP_SYS_ADMIN
 * fs-exec-root-ro deny exec world writable binary under CAP_SYS_ADMIN, must be owned by root.
-* disable-unix-socket-ebpf disable SO_ATTACH_BPF / SO_ATTACH_REUSEPORT_EBPF for unix socket.
+* disable-unix-socket-ebpf disable SO_ATTACH_BPF / SO_ATTACH_REUSEPORT_EBPF for unix socket.  
 Note: sadly we cant disable sk_peer_cred usage, will break systemd.
 
 * clang-sched-core-warning (clang only) fix warning: use of logical '&&' with constant operand
