@@ -1,0 +1,35 @@
+diff --git a/drivers/vhost/vhost.c b/drivers/vhost/vhost.c
+index 1b3e8d2d5c8b4..5316319d84081 100644
+--- a/drivers/vhost/vhost.c
++++ b/drivers/vhost/vhost.c
+@@ -1337,7 +1337,7 @@ static long vhost_set_memory(struct vhost_dev *d, struct vhost_memory __user *m)
+ 	return -EFAULT;
+ }
+ 
+-long vhost_vring_ioctl(struct vhost_dev *d, int ioctl, void __user *argp)
++long vhost_vring_ioctl(struct vhost_dev *d, unsigned int ioctl, void __user *argp)
+ {
+ 	struct file *eventfp, *filep = NULL;
+ 	bool pollstart = false, pollstop = false;
+diff --git a/drivers/vhost/vhost.h b/drivers/vhost/vhost.h
+index ac4b6056f19ae..d8ee85ae8fdcc 100644
+--- a/drivers/vhost/vhost.h
++++ b/drivers/vhost/vhost.h
+@@ -45,7 +45,7 @@ void vhost_poll_stop(struct vhost_poll *poll);
+ void vhost_poll_flush(struct vhost_poll *poll);
+ void vhost_poll_queue(struct vhost_poll *poll);
+ void vhost_work_flush(struct vhost_dev *dev, struct vhost_work *work);
+-long vhost_vring_ioctl(struct vhost_dev *d, int ioctl, void __user *argp);
++long vhost_vring_ioctl(struct vhost_dev *d, unsigned int ioctl, void __user *argp);
+ 
+ struct vhost_log {
+ 	u64 addr;
+@@ -177,7 +177,7 @@ void vhost_dev_reset_owner(struct vhost_dev *, struct vhost_umem *);
+ void vhost_dev_cleanup(struct vhost_dev *);
+ void vhost_dev_stop(struct vhost_dev *);
+ long vhost_dev_ioctl(struct vhost_dev *, unsigned int ioctl, void __user *argp);
+-long vhost_vring_ioctl(struct vhost_dev *d, int ioctl, void __user *argp);
++long vhost_vring_ioctl(struct vhost_dev *d, unsigned int ioctl, void __user *argp);
+ int vhost_vq_access_ok(struct vhost_virtqueue *vq);
+ int vhost_log_access_ok(struct vhost_dev *);
+ 

@@ -1,0 +1,53 @@
+diff --git a/Documentation/sysctl/kernel.txt b/Documentation/sysctl/kernel.txt
+index 694968c7523c..e057ef154f30 100644
+--- a/Documentation/sysctl/kernel.txt
++++ b/Documentation/sysctl/kernel.txt
+@@ -661,6 +661,7 @@ users (without CAP_SYS_ADMIN).  The default value is 2.
+      Disallow raw tracepoint access by users without CAP_SYS_ADMIN
+ >=1: Disallow CPU event access by users without CAP_SYS_ADMIN
+ >=2: Disallow kernel profiling by users without CAP_SYS_ADMIN
++>=3: Disallow all event access by users without CAP_SYS_ADMIN
+ 
+ ==============================================================
+ 
+diff --git a/include/linux/perf_event.h b/include/linux/perf_event.h
+index 8e22f24ded6a..4eeecc9767e3 100644
+--- a/include/linux/perf_event.h
++++ b/include/linux/perf_event.h
+@@ -1180,6 +1180,11 @@ static inline bool perf_paranoid_kernel(void)
+ 	return sysctl_perf_event_paranoid > 1;
+ }
+ 
++static inline bool perf_paranoid_any(void)
++{
++	return sysctl_perf_event_paranoid > 2;
++}
++
+ extern void perf_event_init(void);
+ extern void perf_tp_event(u16 event_type, u64 count, void *record,
+ 			  int entry_size, struct pt_regs *regs,
+diff --git a/kernel/events/core.c b/kernel/events/core.c
+index cecd72eb09b8..9b0d26729fd1 100644
+--- a/kernel/events/core.c
++++ b/kernel/events/core.c
+@@ -397,8 +397,9 @@ static cpumask_var_t perf_online_mask;
+  *   0 - disallow raw tracepoint access for unpriv
+  *   1 - disallow cpu events for unpriv
+  *   2 - disallow kernel profiling for unpriv
++ *   3 - disallow all unpriv perf event use
+  */
+-int sysctl_perf_event_paranoid __read_mostly = 2;
++int sysctl_perf_event_paranoid __read_mostly = 3;
+ 
+ /* Minimum for 512 kiB + 1 user control page */
+ int sysctl_perf_event_mlock __read_mostly = 512 + (PAGE_SIZE / 1024); /* 'free' kiB per user */
+@@ -9935,6 +9936,9 @@ SYSCALL_DEFINE5(perf_event_open,
+ 	if (flags & ~PERF_FLAG_ALL)
+ 		return -EINVAL;
+ 
++	if (perf_paranoid_any() && !capable(CAP_SYS_ADMIN))
++				return -EACCES;
++
+ 	err = perf_copy_attr(attr_uptr, &attr);
+ 	if (err)
+ 		return err;

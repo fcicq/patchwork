@@ -1,0 +1,14 @@
+diff --git a/arch/x86/include/asm/efi.h b/arch/x86/include/asm/efi.h
+index a399c1eb..bedbe48f 100644
+--- a/arch/x86/include/asm/efi.h
++++ b/arch/x86/include/asm/efi.h
+@@ -5,6 +5,9 @@
+ #include <asm/fpu/api.h>
+ #include <asm/pgtable.h>
+ #include <asm/processor-flags.h>
++#undef CONFIG_CGROUPS
++#undef CONFIG_MEMCG
++#undef CONFIG_SOCK_CGROUP_DATA
+ #include <asm/tlb.h>
+ #include <asm/nospec-branch.h>
+ 
