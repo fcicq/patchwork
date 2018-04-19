@@ -7,9 +7,13 @@ patch (including others' work) for opensource projects.
 * proc-hidepid use hidepid=2 by default
 * kconfig-x86-removecompression reduce kernel size
 * proc-pid-net-perm deny /proc/net access unless CAP_NET_ADMIN
+* protect-proc-pid-ns deny /proc/pid/ns access unless CAP_SYS_ADMIN
+* fs-exec-root-ro deny exec world writable binary under CAP_SYS_ADMIN, must be owned by root.
+* disable-unix-socket-ebpf disable SO_ATTACH_BPF / SO_ATTACH_REUSEPORT_EBPF for unix socket.
+Note: sadly we cant disable sk_peer_cred usage, will break systemd.
 
 * clang-sched-core-warning (clang only) fix warning: use of logical '&&' with constant operand
-* kaslr-link-warning-cgroup (clang only) fix struct cgroup warning, see also https://lkml.org/lkml/2017/10/17/66  
+* v2-link-warning-cgroup-clang (clang only) fix struct cgroup warning, see also https://lkml.org/lkml/2017/10/17/66  
 warning: field 'cgrp' with variable sized type 'struct cgroup' not at the end of a struct  
      or class is a GNU extension \[-Wgnu-variable-sized-type-not-at-end\]
 
@@ -21,6 +25,10 @@ warning: field 'cgrp' with variable sized type 'struct cgroup' not at the end of
 * 10027975 mm: don't warn about allocations which stall for too long
 * 10122749 sched: Only immediately migrate tasks due to interrupts if prev and target CPUs share cache
 
+## picked from random sources
+* 9249919 sysctl_perf_event_paranoid = 3, disallow all unpriv perf event use
+* 10347561 (fixed) crashes/hung tasks with z3pool under memory pressure
+
 ## known rejected by upstream maintainer
 * 1776151 devtmpfs: mount with noexec and nosuid (Note: systemd mounts with nosuid by default, noexec may break some app)
 * 2212521 tcp: sysctl to disable TCP simultaneous connect
@@ -29,6 +37,7 @@ warning: field 'cgrp' with variable sized type 'struct cgroup' not at the end of
 ## other
 * bugzilla-194091-lld-rebased fix arch/x86/realmode/rm/header.o is incompatible with elf_x86_64 for llvm lld  
 from https://bugzilla.kernel.org/show_bug.cgi?id=194091
+* 10283019 vhost: fix vhost ioctl signature to build with clang
 * clearlinux-spinfaster from clear linux, tweak rwsem owner spinning a bit
 
 # Resources
