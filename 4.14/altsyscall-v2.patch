@@ -464,7 +464,6 @@ index 4d2d3782d..3b7fe9305 100644
  obj-$(CONFIG_INTEGRITY)			+= integrity/
 +
 +obj-$(CONFIG_ALT_SYSCALL_CHROMIUMOS)	+= chromiumos/alt-syscall.o
-
 diff --git a/security/chromiumos/alt-syscall.c b/security/chromiumos/alt-syscall.c
 index e69de29bb..5b0ebc9b0 100644
 --- a/security/chromiumos/alt-syscall.c
