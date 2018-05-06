@@ -7,7 +7,7 @@ patch (including others' work) for opensource projects.
 * proc-hidepid use hidepid=2 by default
 * kconfig-x86-removecompression reduce kernel size
 * proc-pid-net-perm deny /proc/net access unless CAP_NET_ADMIN
-* protect-proc-pid-ns deny /proc/pid/ns access unless CAP_SYS_ADMIN
+* v2-protect-proc-pid-ns deny /proc/pid/ns access unless CAP_SYS_ADMIN
 * fs-exec-root-ro deny exec world writable binary under CAP_SYS_ADMIN, must be owned by root.
 * disable-unix-socket-ebpf disable SO_ATTACH_BPF / SO_ATTACH_REUSEPORT_EBPF for unix socket.  
 Note: sadly we cant disable sk_peer_cred usage, will break systemd.
@@ -19,11 +19,16 @@ warning: field 'cgrp' with variable sized type 'struct cgroup' not at the end of
 
 ## 4.14 patches ported by me
 * 20180404-bvt Borrowed Virtual Time for 4.14, original for 3.5 from https://gist.github.com/leverich/5913713
+* altsyscall-v2 CHROMIUM: x86: create alt-syscall infrastructure from chromiumos kernel.  
+removed nr_syscall, adapted for kpti (required after "x86/entry/64: Remove the SYSCALL64 fast path" applied).
 
 ## picked from mainline (4.14+)
 * 9934049 mm,page_alloc: don't call \_\_node_reclaim() without scoped allocation constraints.
 * 10027975 mm: don't warn about allocations which stall for too long
 * 10122749 sched: Only immediately migrate tasks due to interrupts if prev and target CPUs share cache
+* 10292559 mm: Allow to kill tasks doing pcpu_alloc() and waiting for pcpu_balance_workfn()
+* 10376507 sched/core: Don't schedule threads on pre-empted vcpus
+* (upstream 9092c71b) mm: use sc->priority for slab shrink targets
 
 ## picked from random sources
 * 9249919 sysctl_perf_event_paranoid = 3, disallow all unpriv perf event use
