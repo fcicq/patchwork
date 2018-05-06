@@ -1,0 +1,197 @@
+diff --git a/include/trace/events/vmscan.h b/include/trace/events/vmscan.h
+index d70b53e65f432..e0b8b9173e1c1 100644
+--- a/include/trace/events/vmscan.h
++++ b/include/trace/events/vmscan.h
+@@ -192,12 +192,12 @@ DEFINE_EVENT(mm_vmscan_direct_reclaim_end_template, mm_vmscan_memcg_softlimit_re
+ 
+ TRACE_EVENT(mm_shrink_slab_start,
+ 	TP_PROTO(struct shrinker *shr, struct shrink_control *sc,
+-		long nr_objects_to_shrink, unsigned long pgs_scanned,
+-		unsigned long lru_pgs, unsigned long cache_items,
+-		unsigned long long delta, unsigned long total_scan),
++		long nr_objects_to_shrink, unsigned long cache_items,
++		unsigned long long delta, unsigned long total_scan,
++		int priority),
+ 
+-	TP_ARGS(shr, sc, nr_objects_to_shrink, pgs_scanned, lru_pgs,
+-		cache_items, delta, total_scan),
++	TP_ARGS(shr, sc, nr_objects_to_shrink, cache_items, delta, total_scan,
++		priority),
+ 
+ 	TP_STRUCT__entry(
+ 		__field(struct shrinker *, shr)
+@@ -205,11 +205,10 @@ TRACE_EVENT(mm_shrink_slab_start,
+ 		__field(int, nid)
+ 		__field(long, nr_objects_to_shrink)
+ 		__field(gfp_t, gfp_flags)
+-		__field(unsigned long, pgs_scanned)
+-		__field(unsigned long, lru_pgs)
+ 		__field(unsigned long, cache_items)
+ 		__field(unsigned long long, delta)
+ 		__field(unsigned long, total_scan)
++		__field(int, priority)
+ 	),
+ 
+ 	TP_fast_assign(
+@@ -218,24 +217,22 @@ TRACE_EVENT(mm_shrink_slab_start,
+ 		__entry->nid = sc->nid;
+ 		__entry->nr_objects_to_shrink = nr_objects_to_shrink;
+ 		__entry->gfp_flags = sc->gfp_mask;
+-		__entry->pgs_scanned = pgs_scanned;
+-		__entry->lru_pgs = lru_pgs;
+ 		__entry->cache_items = cache_items;
+ 		__entry->delta = delta;
+ 		__entry->total_scan = total_scan;
++		__entry->priority = priority;
+ 	),
+ 
+-	TP_printk("%pF %p: nid: %d objects to shrink %ld gfp_flags %s pgs_scanned %ld lru_pgs %ld cache items %ld delta %lld total_scan %ld",
++	TP_printk("%pF %p: nid: %d objects to shrink %ld gfp_flags %s cache items %ld delta %lld total_scan %ld priority %d",
+ 		__entry->shrink,
+ 		__entry->shr,
+ 		__entry->nid,
+ 		__entry->nr_objects_to_shrink,
+ 		show_gfp_flags(__entry->gfp_flags),
+-		__entry->pgs_scanned,
+-		__entry->lru_pgs,
+ 		__entry->cache_items,
+ 		__entry->delta,
+-		__entry->total_scan)
++		__entry->total_scan,
++		__entry->priority)
+ );
+ 
+ TRACE_EVENT(mm_shrink_slab_end,
+diff --git a/mm/vmscan.c b/mm/vmscan.c
+index 47d5ced51f2d4..e73274a60b226 100644
+--- a/mm/vmscan.c
++++ b/mm/vmscan.c
+@@ -310,9 +310,7 @@ EXPORT_SYMBOL(unregister_shrinker);
+ #define SHRINK_BATCH 128
+ 
+ static unsigned long do_shrink_slab(struct shrink_control *shrinkctl,
+-				    struct shrinker *shrinker,
+-				    unsigned long nr_scanned,
+-				    unsigned long nr_eligible)
++				    struct shrinker *shrinker, int priority)
+ {
+ 	unsigned long freed = 0;
+ 	unsigned long long delta;
+@@ -337,9 +335,9 @@ static unsigned long do_shrink_slab(struct shrink_control *shrinkctl,
+ 	nr = atomic_long_xchg(&shrinker->nr_deferred[nid], 0);
+ 
+ 	total_scan = nr;
+-	delta = (4 * nr_scanned) / shrinker->seeks;
+-	delta *= freeable;
+-	do_div(delta, nr_eligible + 1);
++	delta = freeable >> priority;
++	delta *= 4;
++	do_div(delta, shrinker->seeks);
+ 	total_scan += delta;
+ 	if (total_scan < 0) {
+ 		pr_err("shrink_slab: %pF negative objects to delete nr=%ld\n",
+@@ -373,8 +371,7 @@ static unsigned long do_shrink_slab(struct shrink_control *shrinkctl,
+ 		total_scan = freeable * 2;
+ 
+ 	trace_mm_shrink_slab_start(shrinker, shrinkctl, nr,
+-				   nr_scanned, nr_eligible,
+-				   freeable, delta, total_scan);
++				   freeable, delta, total_scan, priority);
+ 
+ 	/*
+ 	 * Normally, we should not scan less than batch_size objects in one
+@@ -434,8 +431,7 @@ static unsigned long do_shrink_slab(struct shrink_control *shrinkctl,
+  * @gfp_mask: allocation context
+  * @nid: node whose slab caches to target
+  * @memcg: memory cgroup whose slab caches to target
+- * @nr_scanned: pressure numerator
+- * @nr_eligible: pressure denominator
++ * @priority: the reclaim priority
+  *
+  * Call the shrink functions to age shrinkable caches.
+  *
+@@ -447,20 +443,14 @@ static unsigned long do_shrink_slab(struct shrink_control *shrinkctl,
+  * objects from the memory cgroup specified. Otherwise, only unaware
+  * shrinkers are called.
+  *
+- * @nr_scanned and @nr_eligible form a ratio that indicate how much of
+- * the available objects should be scanned.  Page reclaim for example
+- * passes the number of pages scanned and the number of pages on the
+- * LRU lists that it considered on @nid, plus a bias in @nr_scanned
+- * when it encountered mapped pages.  The ratio is further biased by
+- * the ->seeks setting of the shrink function, which indicates the
+- * cost to recreate an object relative to that of an LRU page.
++ * @priority is sc->priority, we take the number of objects and >> by priority
++ * in order to get the scan target.
+  *
+  * Returns the number of reclaimed slab objects.
+  */
+ static unsigned long shrink_slab(gfp_t gfp_mask, int nid,
+ 				 struct mem_cgroup *memcg,
+-				 unsigned long nr_scanned,
+-				 unsigned long nr_eligible)
++				 int priority)
+ {
+ 	struct shrinker *shrinker;
+ 	unsigned long freed = 0;
+@@ -468,9 +458,6 @@ static unsigned long shrink_slab(gfp_t gfp_mask, int nid,
+ 	if (memcg && (!memcg_kmem_enabled() || !mem_cgroup_online(memcg)))
+ 		return 0;
+ 
+-	if (nr_scanned == 0)
+-		nr_scanned = SWAP_CLUSTER_MAX;
+-
+ 	if (!down_read_trylock(&shrinker_rwsem)) {
+ 		/*
+ 		 * If we would return 0, our callers would understand that we
+@@ -501,7 +488,7 @@ static unsigned long shrink_slab(gfp_t gfp_mask, int nid,
+ 		if (!(shrinker->flags & SHRINKER_NUMA_AWARE))
+ 			sc.nid = 0;
+ 
+-		freed += do_shrink_slab(&sc, shrinker, nr_scanned, nr_eligible);
++		freed += do_shrink_slab(&sc, shrinker, priority);
+ 	}
+ 
+ 	up_read(&shrinker_rwsem);
+@@ -519,8 +506,7 @@ void drop_slab_node(int nid)
+ 
+ 		freed = 0;
+ 		do {
+-			freed += shrink_slab(GFP_KERNEL, nid, memcg,
+-					     1000, 1000);
++			freed += shrink_slab(GFP_KERNEL, nid, memcg, 0);
+ 		} while ((memcg = mem_cgroup_iter(NULL, memcg, NULL)) != NULL);
+ 	} while (freed > 10);
+ }
+@@ -2615,14 +2601,12 @@ static bool shrink_node(pg_data_t *pgdat, struct scan_control *sc)
+ 
+ 			reclaimed = sc->nr_reclaimed;
+ 			scanned = sc->nr_scanned;
+-
+ 			shrink_node_memcg(pgdat, memcg, sc, &lru_pages);
+ 			node_lru_pages += lru_pages;
+ 
+ 			if (memcg)
+ 				shrink_slab(sc->gfp_mask, pgdat->node_id,
+-					    memcg, sc->nr_scanned - scanned,
+-					    lru_pages);
++					    memcg, sc->priority);
+ 
+ 			/* Record the group's reclaim efficiency */
+ 			vmpressure(sc->gfp_mask, memcg, false,
+@@ -2646,14 +2630,9 @@ static bool shrink_node(pg_data_t *pgdat, struct scan_control *sc)
+ 			}
+ 		} while ((memcg = mem_cgroup_iter(root, memcg, &reclaim)));
+ 
+-		/*
+-		 * Shrink the slab caches in the same proportion that
+-		 * the eligible LRU pages were scanned.
+-		 */
+ 		if (global_reclaim(sc))
+ 			shrink_slab(sc->gfp_mask, pgdat->node_id, NULL,
+-				    sc->nr_scanned - nr_scanned,
+-				    node_lru_pages);
++				    sc->priority);
+ 
+ 		if (reclaim_state) {
+ 			sc->nr_reclaimed += reclaim_state->reclaimed_slab;

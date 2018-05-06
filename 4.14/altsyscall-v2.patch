@@ -1,0 +1,466 @@
+diff --git a/arch/x86/Kconfig b/arch/x86/Kconfig
+index 7483cd514..f882018a9 100644
+--- a/arch/x86/Kconfig
++++ b/arch/x86/Kconfig
+@@ -188,6 +188,7 @@ config X86
+ 	select USER_STACKTRACE_SUPPORT
+ 	select VIRT_TO_BUS
+ 	select X86_FEATURE_NAMES		if PROC_FS
++	select ARCH_HAS_ALT_SYSCALL
+ 
+ config INSTRUCTION_DECODER
+ 	def_bool y
+diff --git a/arch/x86/entry/common.c b/arch/x86/entry/common.c
+index 60e21ccfb..3e5fa419f 100644
+--- a/arch/x86/entry/common.c
++++ b/arch/x86/entry/common.c
+@@ -286,9 +286,15 @@ __visible void do_syscall_64(struct pt_regs *regs)
+ 	 */
+ 	if (likely((nr & __SYSCALL_MASK) < NR_syscalls)) {
+ 		nr = array_index_nospec(nr & __SYSCALL_MASK, NR_syscalls);
++#ifdef CONFIG_ALT_SYSCALL
++		regs->ax = ti->sys_call_table[nr](
++			regs->di, regs->si, regs->dx,
++			regs->r10, regs->r8, regs->r9);
++#else
+ 		regs->ax = sys_call_table[nr](
+ 			regs->di, regs->si, regs->dx,
+ 			regs->r10, regs->r8, regs->r9);
++#endif
+ 	}
+ 
+ 	syscall_return_slowpath(regs);
+@@ -329,10 +335,17 @@ static __always_inline void do_syscall_32_irqs_on(struct pt_regs *regs)
+ 		 * the high bits are zero.  Make sure we zero-extend all
+ 		 * of the args.
+ 		 */
++#ifdef CONFIG_ALT_SYSCALL
++		regs->ax = ti->ia32_sys_call_table[nr](
++			(unsigned int)regs->bx, (unsigned int)regs->cx,
++			(unsigned int)regs->dx, (unsigned int)regs->si,
++			(unsigned int)regs->di, (unsigned int)regs->bp);
++#else
+ 		regs->ax = ia32_sys_call_table[nr](
+ 			(unsigned int)regs->bx, (unsigned int)regs->cx,
+ 			(unsigned int)regs->dx, (unsigned int)regs->si,
+ 			(unsigned int)regs->di, (unsigned int)regs->bp);
++#endif
+ 	}
+ 
+ 	syscall_return_slowpath(regs);
+diff --git a/arch/x86/include/asm/syscall.h b/arch/x86/include/asm/syscall.h
+index 03eedc212..8f0c961af 100644
+--- a/arch/x86/include/asm/syscall.h
++++ b/arch/x86/include/asm/syscall.h
+@@ -29,6 +29,7 @@ extern const sys_call_ptr_t sys_call_table[];
+ #define ia32_sys_call_table sys_call_table
+ #define __NR_syscall_compat_max __NR_syscall_max
+ #define IA32_NR_syscalls NR_syscalls
++#define ia32_nr_syscalls nr_syscalls
+ #endif
+ 
+ #if defined(CONFIG_IA32_EMULATION)
+diff --git a/arch/x86/include/asm/thread_info.h b/arch/x86/include/asm/thread_info.h
+index eda3b6823..076781969 100644
+--- a/arch/x86/include/asm/thread_info.h
++++ b/arch/x86/include/asm/thread_info.h
+@@ -50,17 +50,54 @@
+  */
+ #ifndef __ASSEMBLY__
+ struct task_struct;
++
++/* same as sys_call_ptr_t from asm/syscall.h */
++typedef asmlinkage long (*ti_sys_call_ptr_t)(unsigned long, unsigned long,
++					     unsigned long, unsigned long,
++					     unsigned long, unsigned long);
++
+ #include <asm/cpufeature.h>
+ #include <linux/atomic.h>
+ 
+ struct thread_info {
+ 	unsigned long		flags;		/* low level flags */
+ 	u32			status;		/* thread synchronous flags */
++#ifdef CONFIG_ALT_SYSCALL
++	/*
++	 * This uses nr_syscalls instead of nr_syscall_max because we want
++	 * to be able to entirely disable a syscall table (e.g. compat) by
++	 * setting nr_syscalls to 0. This requires some careful work in
++	 * the syscall entry assembly code, most variations use ..._max.
++	 */
++	//unsigned int		nr_syscalls;	/* size of below */
++	const ti_sys_call_ptr_t	*sys_call_table;
++# ifdef CONFIG_IA32_EMULATION
++	//unsigned int		ia32_nr_syscalls;	/* size of below */
++	const ti_sys_call_ptr_t	*ia32_sys_call_table;
++# endif
++#endif
+ };
+ 
++#ifdef CONFIG_ALT_SYSCALL
++# ifdef CONFIG_IA32_EMULATION
++#  define INIT_THREAD_INFO_SYSCALL_COMPAT			\
++	/* .ia32_nr_syscalls	= IA32_NR_syscalls, */		\
++	.ia32_sys_call_table	= ia32_sys_call_table,
++# else
++#  define INIT_THREAD_INFO_SYSCALL_COMPAT /* */
++# endif
++# define INIT_THREAD_INFO_SYSCALL \
++	/* .nr_syscalls	= NR_syscalls, */		\
++	.sys_call_table	= sys_call_table,	\
++	INIT_THREAD_INFO_SYSCALL_COMPAT
++#else
++# define INIT_THREAD_INFO_SYSCALL /* */
++#endif
++
+ #define INIT_THREAD_INFO(tsk)			\
+ {						\
+ 	.flags		= 0,			\
++	INIT_THREAD_INFO_SYSCALL		\
+ }
+ 
+ #define init_stack		(init_thread_union.stack)
+diff --git a/arch/x86/kernel/Makefile b/arch/x86/kernel/Makefile
+index 295abaa58..09399da4b 100644
+--- a/arch/x86/kernel/Makefile
++++ b/arch/x86/kernel/Makefile
+@@ -132,6 +132,8 @@ obj-$(CONFIG_UNWINDER_ORC)		+= unwind_orc.o
+ obj-$(CONFIG_UNWINDER_FRAME_POINTER)	+= unwind_frame.o
+ obj-$(CONFIG_UNWINDER_GUESS)		+= unwind_guess.o
+ 
++obj-$(CONFIG_ALT_SYSCALL)		+= alt-syscall.o
++
+ ###
+ # 64 bit specific files
+ ifeq ($(CONFIG_X86_64),y)
+diff --git a/arch/x86/kernel/alt-syscall.c b/arch/x86/kernel/alt-syscall.c
+index e69de29bb..5ae587af7 100644
+--- a/arch/x86/kernel/alt-syscall.c
++++ b/arch/x86/kernel/alt-syscall.c
+@@ -0,0 +1,70 @@
++#include <linux/sched.h>
++#include <linux/mm.h>
++#include <linux/kernel.h>
++#include <linux/errno.h>
++#include <linux/unistd.h>
++#include <linux/slab.h>
++#include <linux/stddef.h>
++#include <linux/syscalls.h>
++#include <linux/alt-syscall.h>
++
++#include <asm/syscall.h>
++#include <asm/syscalls.h>
++
++int arch_dup_sys_call_table(struct alt_sys_call_table *entry)
++{
++	if (!entry)
++		return -EINVAL;
++	/* Table already allocated. */
++	if (entry->table)
++		return -EINVAL;
++#ifdef CONFIG_IA32_EMULATION
++	if (entry->compat_table)
++		return -EINVAL;
++#endif
++	entry->size = NR_syscalls;
++	entry->table = kcalloc(entry->size, sizeof(sys_call_ptr_t),
++			       GFP_KERNEL);
++	if (!entry->table)
++		goto failed;
++
++	memcpy(entry->table, sys_call_table,
++	       entry->size * sizeof(sys_call_ptr_t));
++
++#ifdef CONFIG_IA32_EMULATION
++	entry->compat_size = IA32_NR_syscalls;
++	entry->compat_table = kcalloc(entry->compat_size,
++				      sizeof(sys_call_ptr_t), GFP_KERNEL);
++	if (!entry->compat_table)
++		goto failed;
++	memcpy(entry->compat_table, ia32_sys_call_table,
++	       entry->compat_size * sizeof(sys_call_ptr_t));
++#endif
++
++	return 0;
++
++failed:
++	entry->size = 0;
++	kfree(entry->table);
++	entry->table = NULL;
++#ifdef CONFIG_IA32_EMULATION
++	entry->compat_size = 0;
++#endif
++	return -ENOMEM;
++}
++
++/* Operates on "current", which isn't racey, since it's _in_ a syscall. */
++int arch_set_sys_call_table(struct alt_sys_call_table *entry)
++{
++	if (!entry)
++		return -EINVAL;
++
++//	current_thread_info()->nr_syscalls = entry->size;
++	current_thread_info()->sys_call_table = entry->table;
++#ifdef CONFIG_IA32_EMULATION
++//	current_thread_info()->ia32_nr_syscalls = entry->compat_size;
++	current_thread_info()->ia32_sys_call_table = entry->compat_table;
++#endif
++
++	return 0;
++}
+diff --git a/arch/x86/kernel/asm-offsets.c b/arch/x86/kernel/asm-offsets.c
+index 76417a9aa..62cfa9c9d 100644
+--- a/arch/x86/kernel/asm-offsets.c
++++ b/arch/x86/kernel/asm-offsets.c
+@@ -40,6 +40,15 @@ void common(void) {
+ 	OFFSET(TASK_TI_flags, task_struct, thread_info.flags);
+ 	OFFSET(TASK_addr_limit, task_struct, thread.addr_limit);
+ 
++#ifdef CONFIG_ALT_SYSCALL
++//	OFFSET(TASK_TI_nr_syscalls, task_struct, thread_info.nr_syscalls);
++	OFFSET(TASK_TI_sys_call_table, task_struct, thread_info.sys_call_table);
++# ifdef CONFIG_IA32_EMULATION
++//	OFFSET(TASK_TI_ia32_nr_syscalls, task_struct, thread_info.ia32_nr_syscalls);
++	OFFSET(TASK_TI_ia32_sys_call_table, task_struct, thread_info.ia32_sys_call_table);
++# endif
++#endif
++
+ 	BLANK();
+ 	OFFSET(crypto_tfm_ctx_offset, crypto_tfm, __crt_ctx);
+ 
+diff --git a/include/linux/alt-syscall.h b/include/linux/alt-syscall.h
+index e69de29bb..00f37c005 100644
+--- a/include/linux/alt-syscall.h
++++ b/include/linux/alt-syscall.h
+@@ -0,0 +1,59 @@
++#ifndef _ALT_SYSCALL_H
++#define _ALT_SYSCALL_H
++
++#include <linux/errno.h>
++
++#ifdef CONFIG_ALT_SYSCALL
++
++#include <linux/list.h>
++#include <asm/syscall.h>
++
++#define ALT_SYS_CALL_NAME_MAX	32
++
++struct alt_sys_call_table {
++	char name[ALT_SYS_CALL_NAME_MAX + 1];
++	sys_call_ptr_t *table;
++	int size;
++#ifdef CONFIG_IA32_EMULATION
++	sys_call_ptr_t *compat_table;
++	int compat_size;
++#endif
++	struct list_head node;
++};
++
++/*
++ * arch_dup_sys_call_table should return the default syscall table, not
++ * the current syscall table, since we want to explicitly not allow
++ * syscall table composition. A selected syscall table should be treated
++ * as a single execution personality.
++ */
++
++int arch_dup_sys_call_table(struct alt_sys_call_table *table);
++int arch_set_sys_call_table(struct alt_sys_call_table *table);
++
++int register_alt_sys_call_table(struct alt_sys_call_table *table);
++int set_alt_sys_call_table(char __user *name);
++
++#else
++
++struct alt_sys_call_table;
++
++static inline int arch_dup_sys_call_table(struct alt_sys_call_table *table)
++{
++	return -ENOSYS;
++}
++static inline int arch_set_sys_call_table(struct alt_sys_call_table *table)
++{
++	return -ENOSYS;
++}
++static inline int register_alt_sys_call_table(struct alt_sys_call_table *table)
++{
++	return -ENOSYS;
++}
++static inline int set_alt_sys_call_table(char __user *name)
++{
++	return -ENOSYS;
++}
++#endif
++
++#endif /* _ALT_SYSCALL_H */
+diff --git a/include/uapi/linux/prctl.h b/include/uapi/linux/prctl.h
+index b64007142..2ffa511ff 100644
+--- a/include/uapi/linux/prctl.h
++++ b/include/uapi/linux/prctl.h
+@@ -155,6 +155,9 @@ struct prctl_mm_map {
+ #define PR_SET_PTRACER 0x59616d61
+ # define PR_SET_PTRACER_ANY ((unsigned long)-1)
+ 
++#define PR_ALT_SYSCALL 0x43724f53
++# define PR_ALT_SYSCALL_SET_SYSCALL_TABLE 1
++
+ #define PR_SET_CHILD_SUBREAPER	36
+ #define PR_GET_CHILD_SUBREAPER	37
+ 
+diff --git a/init/init_task.c b/init/init_task.c
+index 9325fee7d..ce5c9095e 100644
+--- a/init/init_task.c
++++ b/init/init_task.c
+@@ -10,6 +10,8 @@
+ #include <linux/fs.h>
+ #include <linux/mm.h>
+ 
++#include <linux/alt-syscall.h>
++
+ #include <asm/pgtable.h>
+ #include <linux/uaccess.h>
+ 
+diff --git a/kernel/Makefile b/kernel/Makefile
+index 172d151d4..b46d47299 100644
+--- a/kernel/Makefile
++++ b/kernel/Makefile
+@@ -42,6 +42,8 @@ obj-y += irq/
+ obj-y += rcu/
+ obj-y += livepatch/
+ 
++obj-$(CONFIG_ALT_SYSCALL) += alt-syscall.o
++
+ obj-$(CONFIG_CHECKPOINT_RESTORE) += kcmp.o
+ obj-$(CONFIG_FREEZER) += freezer.o
+ obj-$(CONFIG_PROFILING) += profile.o
+diff --git a/kernel/alt-syscall.c b/kernel/alt-syscall.c
+index e69de29bb..99599e150 100644
+--- a/kernel/alt-syscall.c
++++ b/kernel/alt-syscall.c
+@@ -0,0 +1,66 @@
++/*
++ * Alternate Syscall Table Infrastructure
++ *
++ * Copyright 2014 Google Inc. All Rights Reserved
++ *
++ * Authors:
++ *      Kees Cook   <keescook@chromium.org>
++ *      Will Drewry <wad@chromium.org>
++ *
++ * This software is licensed under the terms of the GNU General Public
++ * License version 2, as published by the Free Software Foundation, and
++ * may be copied, distributed, and modified under those terms.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
++
++#include <linux/kernel.h>
++#include <linux/list.h>
++#include <linux/spinlock.h>
++#include <linux/slab.h>
++#include <linux/uaccess.h>
++#include <linux/alt-syscall.h>
++
++static LIST_HEAD(alt_sys_call_tables);
++static DEFINE_SPINLOCK(alt_sys_call_tables_lock);
++
++/* XXX: there is no "unregister" yet. */
++int register_alt_sys_call_table(struct alt_sys_call_table *entry)
++{
++	if (!entry)
++		return -EINVAL;
++
++	spin_lock(&alt_sys_call_tables_lock);
++	list_add(&entry->node, &alt_sys_call_tables);
++	spin_unlock(&alt_sys_call_tables_lock);
++
++	pr_info("table '%s' available.\n", entry->name);
++
++	return 0;
++}
++
++int set_alt_sys_call_table(char * __user uname)
++{
++	char name[ALT_SYS_CALL_NAME_MAX + 1] = { };
++	struct alt_sys_call_table *entry;
++
++	if (copy_from_user(name, uname, ALT_SYS_CALL_NAME_MAX))
++		return -EFAULT;
++
++	spin_lock(&alt_sys_call_tables_lock);
++	list_for_each_entry(entry, &alt_sys_call_tables, node) {
++		if (!strcmp(entry->name, name)) {
++			if (arch_set_sys_call_table(entry))
++				continue;
++			spin_unlock(&alt_sys_call_tables_lock);
++			return 0;
++		}
++	}
++	spin_unlock(&alt_sys_call_tables_lock);
++
++	return -ENOENT;
++}
+diff --git a/kernel/sys.c b/kernel/sys.c
+index 524a4cb9b..7862b14a4 100644
+--- a/kernel/sys.c
++++ b/kernel/sys.c
+@@ -45,6 +45,7 @@
+ 
+ #include <linux/compat.h>
+ #include <linux/syscalls.h>
++#include <linux/alt-syscall.h>
+ #include <linux/kprobes.h>
+ #include <linux/user_namespace.h>
+ #include <linux/binfmts.h>
+@@ -2268,6 +2269,12 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
+ 	case PR_SET_SECCOMP:
+ 		error = prctl_set_seccomp(arg2, (char __user *)arg3);
+ 		break;
++	case PR_ALT_SYSCALL:
++		if (arg2 == PR_ALT_SYSCALL_SET_SYSCALL_TABLE)
++			error = set_alt_sys_call_table((char __user *)arg3);
++		else
++			error = -EINVAL;
++		break;
+ 	case PR_GET_TSC:
+ 		error = GET_TSC_CTL(arg2);
+ 		break;
+diff --git a/security/Kconfig b/security/Kconfig
+index 87f2a6f84..1bb78f8dc 100644
+--- a/security/Kconfig
++++ b/security/Kconfig
+@@ -263,5 +263,21 @@ config DEFAULT_SECURITY
+ 	default "apparmor" if DEFAULT_SECURITY_APPARMOR
+ 	default "" if DEFAULT_SECURITY_DAC
+ 
+-endmenu
++config ARCH_HAS_ALT_SYSCALL
++	def_bool n
++
++config ALT_SYSCALL
++	bool "Alternate syscall table support"
++	depends on ARCH_HAS_ALT_SYSCALL
++	help
++	  Allow syscall table to be swapped on a running process.
+ 
++config ALT_SYSCALL_CHROMIUMOS
++	bool "Chromium OS Alt-Syscall Tables"
++	depends on ALT_SYSCALL
++	help
++	  Register restricted, alternate syscall tables used by Chromium OS
++	  using the alt-syscall infrastructure.  Alternate syscall tables
++	  can be selected with prctl(PR_ALT_SYSCALL).
++
++endmenu
+diff --git a/security/Makefile b/security/Makefile
+index 4d2d3782d..3b7fe9305 100644
+--- a/security/Makefile
++++ b/security/Makefile
+@@ -30,3 +30,5 @@ obj-$(CONFIG_CGROUP_DEVICE)		+= device_cgroup.o
+ # Object integrity file lists
+ subdir-$(CONFIG_INTEGRITY)		+= integrity
+ obj-$(CONFIG_INTEGRITY)			+= integrity/
++
++obj-$(CONFIG_ALT_SYSCALL_CHROMIUMOS)	+= chromiumos/alt-syscall.o
