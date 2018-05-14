@@ -6,9 +6,11 @@ patch (including others' work) for opensource projects.
 * memfd-noexec make memfd_create safer by nodev/noexec/nosuid
 * proc-hidepid use hidepid=2 by default
 * kconfig-x86-removecompression reduce kernel size
+* limit-tiocsti disable ioctl TIOCSTI unless CAP_SYS_ADMIN, prevent some sandbox escape
+* ptrace-allow-poke-only-for-admin disable ptrace PTRACE_POKETEXT/PTRACE_POKEDATA unless CAP_SYS_ADMIN
 * proc-pid-net-perm deny /proc/net access unless CAP_NET_ADMIN
 * v2-protect-proc-pid-ns deny /proc/pid/ns access unless CAP_SYS_ADMIN
-* fs-exec-root-ro deny exec world writable binary under CAP_SYS_ADMIN, must be owned by root.
+* fs-exec-root-ro deny exec world writable binary under CAP_SYS_ADMIN, the executable must be owned by root
 * disable-unix-socket-ebpf disable SO_ATTACH_BPF / SO_ATTACH_REUSEPORT_EBPF for unix socket.  
 Note: sadly we cant disable sk_peer_cred usage, will break systemd.
 
@@ -32,7 +34,7 @@ removed nr_syscall, adapted for kpti (required after "x86/entry/64: Remove the S
 
 ## picked from random sources
 * 9249919 sysctl_perf_event_paranoid = 3, disallow all unpriv perf event use
-* 10347561 (fixed) crashes/hung tasks with z3pool under memory pressure
+* 10347561,10388171,10393297 (fixed) crashes/hung tasks with z3pool under memory pressure
 
 ## known rejected by upstream maintainer
 * 1776151 devtmpfs: mount with noexec and nosuid (Note: systemd mounts with nosuid by default, noexec may break some app)
