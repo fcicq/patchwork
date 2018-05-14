@@ -1,0 +1,24 @@
+diff --git a/mm/z3fold.c b/mm/z3fold.c
+index 5f659ab..8536a47 100644
+--- a/mm/z3fold.c
++++ b/mm/z3fold.c
+@@ -849,10 +849,10 @@ static int z3fold_reclaim_page(struct z3fold_pool *pool, unsigned int retries)
+ 			kref_get(&zhdr->refcount);
+ 			list_del_init(&zhdr->buddy);
+ 			zhdr->cpu = -1;
+-			set_bit(UNDER_RECLAIM, &page->private);
+ 			break;
+ 		}
+ 
++		set_bit(UNDER_RECLAIM, &page->private);
+ 		list_del_init(&page->lru);
+ 		spin_unlock(&pool->lock);
+ 
+@@ -899,6 +899,7 @@ static int z3fold_reclaim_page(struct z3fold_pool *pool, unsigned int retries)
+ 		}
+ next:
+ 		if (test_bit(PAGE_HEADLESS, &page->private)) {
++			clear_bit(UNDER_RECLAIM, &page->private);
+ 			if (ret == 0) {
+ 				free_z3fold_page(page);
+ 				atomic64_dec(&pool->pages_nr);

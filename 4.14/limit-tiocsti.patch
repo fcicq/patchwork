@@ -1,0 +1,14 @@
+diff --git a/drivers/tty/tty_io.c b/drivers/tty/tty_io.c
+index 562d31073..fbbcc3701 100644
+--- a/drivers/tty/tty_io.c
++++ b/drivers/tty/tty_io.c
+@@ -2159,7 +2159,8 @@ static int tiocsti(struct tty_struct *tty, char __user *p)
+ 	char ch, mbz = 0;
+ 	struct tty_ldisc *ld;
+ 
+-	if ((current->signal->tty != tty) && !capable(CAP_SYS_ADMIN))
++	// fcicq: disable tiocsti
++	if (!capable(CAP_SYS_ADMIN))
+ 		return -EPERM;
+ 	if (get_user(ch, p))
+ 		return -EFAULT;
