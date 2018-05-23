@@ -10,7 +10,7 @@ patch (including others' work) for opensource projects.
 * ptrace-allow-poke-only-for-admin disable ptrace PTRACE_POKETEXT/PTRACE_POKEDATA unless CAP_SYS_ADMIN
 * proc-pid-net-perm deny /proc/net access unless CAP_NET_ADMIN
 * v2-protect-proc-pid-ns deny /proc/pid/ns access unless CAP_SYS_ADMIN
-* fs-exec-root-ro deny exec world writable binary under CAP_SYS_ADMIN, the executable must be owned by root
+* v2-fs-exec-root-ro deny exec world writable binary under CAP_SYS_ADMIN or by kthread, the executable must be owned by root
 * disable-unix-socket-ebpf disable SO_ATTACH_BPF / SO_ATTACH_REUSEPORT_EBPF for unix socket.  
 Note: sadly we cant disable sk_peer_cred usage, will break systemd.
 
@@ -34,9 +34,11 @@ removed nr_syscall, adapted for kpti (required after "x86/entry/64: Remove the S
 
 ## picked from random sources
 * 9249919 sysctl_perf_event_paranoid = 3, disallow all unpriv perf event use
-* 10347561,10388171,10393297 (fixed) crashes/hung tasks with z3pool under memory pressure
+* ~~10347561,~~10388171,10393297 (fixed) crashes/hung tasks with z3pool under memory pressure (10347561 included in 4.14 mainline)
+* 10413763 rcu: Speed up calling of RCU tasks callbacks
 
 ## known rejected by upstream maintainer
+* 8151021 sysctl: allow CLONE_NEWUSER to be disabled
 * 1776151 devtmpfs: mount with noexec and nosuid (Note: systemd mounts with nosuid by default, noexec may break some app)
 * 2212521 tcp: sysctl to disable TCP simultaneous connect
 * 79014 Make INET_LHTABLE_SIZE a compile-time tunable
@@ -45,6 +47,7 @@ removed nr_syscall, adapted for kpti (required after "x86/entry/64: Remove the S
 * bugzilla-194091-lld-rebased fix arch/x86/realmode/rm/header.o is incompatible with elf_x86_64 for llvm lld  
 from https://bugzilla.kernel.org/show_bug.cgi?id=194091
 * 10283019 vhost: fix vhost ioctl signature to build with clang
+* 10418483 x86/paravirt: Mark native_save_fl() with \_\_nostackprotector attribute (requires clang-\_\_nostackprotector-definition)
 * clearlinux-spinfaster from clear linux, tweak rwsem owner spinning a bit
 
 # Resources
