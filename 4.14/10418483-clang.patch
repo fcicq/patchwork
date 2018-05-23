@@ -1,0 +1,26 @@
+From 4bdace7d91eb044aa7245da1cdf8a3d52182b7e0 Mon Sep 17 00:00:00 2001
+From: Sedat Dilek <sedat.dilek@credativ.de>
+Date: Tue, 22 May 2018 12:07:24 +0200
+Subject: [PATCH 4/4] x86/paravirt: Mark native_save_fl() with
+ __nostackprotector attribute v2
+
+---
+ arch/x86/include/asm/irqflags.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/x86/include/asm/irqflags.h b/arch/x86/include/asm/irqflags.h
+index 89f08955fff7..7e6765097adc 100644
+--- a/arch/x86/include/asm/irqflags.h
++++ b/arch/x86/include/asm/irqflags.h
+@@ -13,7 +13,7 @@
+  * Interrupt control:
+  */
+ 
+-static inline unsigned long native_save_fl(void)
++static inline __nostackprotector unsigned long native_save_fl(void)
+ {
+ 	unsigned long flags;
+ 
+-- 
+2.17.0
+

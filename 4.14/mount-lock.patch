@@ -1,0 +1,15 @@
+diff --git a/fs/namespace.c b/fs/namespace.c
+index 62b17aff1..3855a72a6 100644
+--- a/fs/namespace.c
++++ b/fs/namespace.c
+@@ -2813,6 +2813,10 @@ long do_mount(const char *dev_name, const char __user *dir_name,
+ 	if (flags & SB_RDONLY)
+ 		mnt_flags |= MNT_READONLY;
+ 
++	/* fcicq: mount lock */
++	if ((flags & (MNT_NODEV | MNT_NOSUID | MNT_NOEXEC)) == (MNT_NODEV | MNT_NOSUID | MNT_NOEXEC))
++		mnt_flags |= MNT_LOCK_NODEV | MNT_LOCK_NOSUID | MNT_LOCK_NOEXEC;
++
+ 	/* The default atime for remount is preservation */
+ 	if ((flags & MS_REMOUNT) &&
+ 	    ((flags & (MS_NOATIME | MS_NODIRATIME | MS_RELATIME |

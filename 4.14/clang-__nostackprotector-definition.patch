@@ -1,0 +1,13 @@
+diff --git a/include/linux/compiler-clang.h b/include/linux/compiler-clang.h
+index 070f85d92..f66eef46c 100644
+--- a/include/linux/compiler-clang.h
++++ b/include/linux/compiler-clang.h
+@@ -21,3 +21,8 @@
+ #ifdef __noretpoline
+ #undef __noretpoline
+ #endif
++
++#ifdef __nostackprotector
++#undef __nostackprotector
++#endif
++#define __nostackprotector __attribute__((no_stack_protector))
