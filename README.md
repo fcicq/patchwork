@@ -34,7 +34,7 @@ removed nr_syscall, adapted for kpti (required after "x86/entry/64: Remove the S
 
 ## picked from random sources
 * 9249919 sysctl_perf_event_paranoid = 3, disallow all unpriv perf event use
-* ~~10347561,~~10388171,10393297 (fixed) crashes/hung tasks with z3pool under memory pressure (10347561 included in 4.14 mainline)
+* 10388171,10393297 (fixed) crashes/hung tasks with z3pool under memory pressure (10347561 included in 4.14 mainline)
 * 10413763 rcu: Speed up calling of RCU tasks callbacks
 
 ## known rejected by upstream maintainer
