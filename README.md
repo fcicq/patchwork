@@ -5,6 +5,7 @@ patch (including others' work) for opensource projects.
 * lz4-zram/zswap Use lz4 for zram/zswap
 * memfd-noexec make memfd_create safer by nodev/noexec/nosuid
 * proc-hidepid use hidepid=2 by default
+* mount-lock disable remount any of exec/suid/dev if mount as noexec,nosuid,nodev
 * kconfig-x86-removecompression reduce kernel size
 * limit-tiocsti disable ioctl TIOCSTI unless CAP_SYS_ADMIN, prevent some sandbox escape
 * ptrace-allow-poke-only-for-admin disable ptrace PTRACE_POKETEXT/PTRACE_POKEDATA unless CAP_SYS_ADMIN
