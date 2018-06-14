@@ -1,0 +1,13 @@
+diff --git a/lib/vsprintf.c b/lib/vsprintf.c
+index 86c3385b9eb3..c482070e379b 100644
+--- a/lib/vsprintf.c
++++ b/lib/vsprintf.c
+@@ -1591,7 +1591,7 @@ char *device_node_string(char *buf, char *end, struct device_node *dn,
+ 	return widen_string(buf, buf - buf_start, end, spec);
+ }
+ 
+-int kptr_restrict __read_mostly;
++int kptr_restrict __read_mostly = 2;
+ 
+ /*
+  * Show a '%p' thing.  A kernel extension is that the '%p' is followed

@@ -1,0 +1,19 @@
+diff --git a/include/linux/sched/loadavg.h b/include/linux/sched/loadavg.h
+index 80bc84ba5..a3bb4062c 100644
+--- a/include/linux/sched/loadavg.h
++++ b/include/linux/sched/loadavg.h
+@@ -17,10 +17,10 @@ extern void get_avenrun(unsigned long *loads, unsigned long offset, int shift);
+ 
+ #define FSHIFT		11		/* nr of bits of precision */
+ #define FIXED_1		(1<<FSHIFT)	/* 1.0 as fixed-point */
+-#define LOAD_FREQ	(5*HZ+1)	/* 5 sec intervals */
+-#define EXP_1		1884		/* 1/exp(5sec/1min) as fixed-point */
+-#define EXP_5		2014		/* 1/exp(5sec/5min) */
+-#define EXP_15		2037		/* 1/exp(5sec/15min) */
++#define LOAD_FREQ	((37*HZ>>3)+1)	/* 4.625 sec intervals */
++#define EXP_1		1896		/* 1/exp(4.625sec/1min) as fixed-point */
++#define EXP_5		2017		/* 1/exp(4.625sec/5min) */
++#define EXP_15		2038		/* 1/exp(4.625sec/15min) */
+ 
+ #define CALC_LOAD(load,exp,n) \
+ 	load *= exp; \

@@ -1,0 +1,14 @@
+diff --git a/fs/proc/base.c b/fs/proc/base.c
+index dd9d4d3a2..fce455491 100644
+--- a/fs/proc/base.c
++++ b/fs/proc/base.c
+@@ -824,6 +824,9 @@ static ssize_t mem_rw(struct file *file, char __user *buf,
+ 	if (!mmget_not_zero(mm))
+ 		goto free;
+ 
++	if (write && !capable(CAP_SYS_ADMIN))
++		return -EACCES;
++
+ 	flags = FOLL_FORCE | (write ? FOLL_WRITE : 0);
+ 
+ 	while (count > 0) {
