@@ -14,6 +14,8 @@ patch (including others' work) for opensource projects.
 * v2-fs-exec-root-ro deny exec world writable binary under CAP_SYS_ADMIN or by kthread, the executable must be owned by root
 * disable-unix-socket-ebpf disable SO_ATTACH_BPF / SO_ATTACH_REUSEPORT_EBPF for unix socket.  
 Note: sadly we cant disable sk_peer_cred usage, will break systemd.
+* loadavg-LOAD_FREQ-4.61-with-HZ-support LOAD_FREQ (4\*HZ+61) avoids loadavg Moire  
+Note: based on http://ripke.com/loadavg/moire , but changed 4\*HZ+61(assuming HZ=100) to (37\*HZ>>3)+1 (~4.625s) to support arbitrary HZ.
 
 * clang-sched-core-warning (clang only) fix warning: use of logical '&&' with constant operand
 * v2-link-warning-cgroup-clang (clang only) fix struct cgroup warning, see also https://lkml.org/lkml/2017/10/17/66  
@@ -32,11 +34,18 @@ removed nr_syscall, adapted for kpti (required after "x86/entry/64: Remove the S
 * 10292559 mm: Allow to kill tasks doing pcpu_alloc() and waiting for pcpu_balance_workfn()
 * 10376507 sched/core: Don't schedule threads on pre-empted vcpus
 * (upstream 9092c71b) mm: use sc->priority for slab shrink targets
+* 10084567 mm: Make count list_lru_one::nr_items lockless
+* 10047257 locking/pvqspinlock: Hybrid PV queued/unfair locks
+* 10421985 bdi: Move cgroup bdi_writeback to a dedicated low concurrency workqueue
+* 10051621 builddeb: Pass the kernel:debarch substvar to dpkg-genchanges  
+Note: this removes a warning message for make deb-pkg/bindeb-pkg.
 
 ## picked from random sources
 * 9249919 sysctl_perf_event_paranoid = 3, disallow all unpriv perf event use
 * 10388171,10393297 (fixed) crashes/hung tasks with z3pool under memory pressure (10347561 included in 4.14 mainline)
-* 10413763 rcu: Speed up calling of RCU tasks callbacks
+* 10425667 (v4) rcu: Speed up calling of RCU tasks callbacks
+* kptr_restrict-default-2 make kernel.kptr_restrict = 2 by default
+* limit-proc-mem-write-permission deny /proc/pid/mem write access unless CAP_SYS_ADMIN
 
 ## known rejected by upstream maintainer
 * 8151021 sysctl: allow CLONE_NEWUSER to be disabled
